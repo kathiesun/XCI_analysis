@@ -10,6 +10,8 @@ Code to regenerate those datasets are provided in the other scripts in this dire
 curate_25mers_from_variants.R curates the 7k-ish k-mers that discriminate between reference and alternate alleles on the X chromosome --
 	output is the all_kmers_chrX.rds file provided in XCI_paper/data/kmer_data
 	functions necessary for this script are found in masterKmers_source.R
+	
+	
 scripts to collate & process k-mer counts (the counts themselves are generated from msBWT: https://github.com/holtjma/msbwt)
 	takes counts from chrX_alt_counts_sp1.csv; chrX_ref_counts_sp1.csv; all files in sp2_counts directory
 	runs JAGS models and perfoms MCMC
