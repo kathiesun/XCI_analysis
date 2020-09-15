@@ -1,11 +1,5 @@
-######## Paternity test
-#setwd("/nas/depts/006/valdar-lab/users/sunk")
-#setwd("C:/DB Mount/Dropbox\ (ValdarLab)/outputs/")
-#### matnut_outputs
 
 library(tidyverse)
-#library(MASS)
-
 
 xce <- as.data.frame(rbind(rix1 = c("CC011", "CC001", "e", "a"),
                     rix2 = c("CC041", "CC051", "b", "b"),

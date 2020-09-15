@@ -5,47 +5,47 @@ library(RColorBrewer)
 library(viridis)
 library(scales)
 
+setwd("XCI_analysis")
 source("ase_summary_source.R")
-setwd("C:/Users/Kathie/Dropbox (ValdarLab)/MaternalDiet/XCI_paper")
 
 ####################################
 ##        General datasets        ##
 ####################################
 
 ## updated Xce info
-xce_map = read.csv("data/demographic_info/xce_info_CC.csv")
+xce_map = read.csv("../data/demographic_info/xce_info_CC.csv")
 
 ## SP1 population information 
-xce_pups = read.csv("data/demographic_info/summary_cegs-mnt_data.csv")
-xce_guide = read.csv("data/demographic_info/summary_cegs-mnt_rixdata.csv")
+xce_pups = read.csv("../data/demographic_info/summary_cegs-mnt_data.csv")
+xce_guide = read.csv("../data/demographic_info/summary_cegs-mnt_rixdata.csv")
 problemPups = c(1404, 1716, 1371, 569, 1911, 1951, 1015) ## removed sample IDs
 
 
 ## SP2 population information 
-cegs_demo = read.csv("data/demographic_info/sp2_demograph_data.csv")
+cegs_demo = read.csv("../data/demographic_info/sp2_demograph_data.csv")
 
 ## X chr genes
-all_genes = read.csv("data/kmer_data/combined_map_kmerMarkers.csv")
+all_genes = read.csv("../data/kmer_data/combined_map_kmerMarkers.csv")
 all_genes = all_genes %>% filter(chr == "X") %>% select(-"X") 
 
 ## load X snps
-snps = readRDS("data/kmer_data/all_kmers_chrX.rds")[[1]]
+snps = readRDS("../data/kmer_data/all_kmers_chrX.rds")[[1]]
 
 ## SP1 cc haplotypes
-indiv_pups = list.files("data/demographic_info/SP1_haplotypes", pattern="haploBlocks", full.names = T)
+indiv_pups = list.files("../data/demographic_info/SP1_haplotypes", pattern="haploBlocks", full.names = T)
 mnt_haplotypes = lapply(indiv_pups, readRDS)
 tmp = do.call("rbind", lapply(indiv_pups, function(x) unlist(strsplit(x, "_"))))
 names(mnt_haplotypes) = paste0("Pup.ID_", tmp[,ncol(tmp)-1])
 
 ## SP2 cc haplotypes
-hap_pat <- readRDS("data/demographic_info/SP2_haplotype_data.rds")
+hap_pat <- readRDS("../data/demographic_info/SP2_haplotype_data.rds")
 
 ## SP1 regression results
-mnt_regSum = readRDS("data/regression_outputs/chrX_summary_sp1.rds")
-mnt_df = readRDS("data/regression_outputs/chrX_data_sp1.rds")
+mnt_regSum = readRDS("../data/regression_outputs/chrX_summary_sp1.rds")
+mnt_df = readRDS("../data/regression_outputs/chrX_data_sp1.rds")
 
 ## SP2 regression results
-cegs_reg = readRDS("data/regression_outputs/chrX_regression_sp2.rds")
+cegs_reg = readRDS("../data/regression_outputs/chrX_regression_sp2.rds")
 cegs_regSum = lapply(cegs_reg, function(x) x$summary)
 
 ## various lookup tables
@@ -190,8 +190,8 @@ nod_rix = xce_guide$CCs[which(xce_guide$grp %in% c("NOD vs stronger","NOD vs NOD
 nzo_rix = xce_guide$CCs[which(xce_guide$grp %in% c("NZO vs c","NZO vs b","NZO vs NZO"))]
 
 ## allele probabilities for mnt and cegs
-alleleprobs_minimuga <- readRDS("data/pup_allele_probabilities/interp_alleleprobs_sp1.rds")
-alleleprobs_cegs = readRDS("data/pup_allele_probabilities/interp_alleleprobs_sp2.rds")
+alleleprobs_minimuga <- readRDS("../data/pup_allele_probabilities/interp_alleleprobs_sp1.rds")
+alleleprobs_cegs = readRDS("../data/pup_allele_probabilities/interp_alleleprobs_sp2.rds")
 
 ## all markers with probabilities
 X_markers = dimnames(alleleprobs_minimuga)[[3]]
@@ -326,17 +326,17 @@ p
 ##################################
 ##          cnv plots           ##
 ##################################
-kmer_bounds = read.table("data/kmer_data/positions_duplications_7.txt",header=T)
+kmer_bounds = read.table("../data/kmer_data/positions_duplications_7.txt",header=T)
 
 ## meta data for samples providing DNA-seq kmer counts
-meta = read.csv("data/kmer_data/dna_45kmer_meta_full.csv")
+meta = read.csv("../data/kmer_data/dna_45kmer_meta_full.csv")
 meta_use = meta %>% filter(use)
 
 ## all unfiltered kmer counts for CC, inbreds, and sister strains
-kmersAll = read.csv("data/kmer_data/dna_45kmer_counts_allCCs.csv")
+kmersAll = read.csv("../data/kmer_data/dna_45kmer_counts_allCCs.csv")
 
 ## remove kmers that have overlap in other SD's
-kmer_deets = read.csv("data/kmer_data/kmer_45_overlaps.csv")
+kmer_deets = read.csv("../data/kmer_data/kmer_45_overlaps.csv")
 kmer_deets = kmer_deets[which(kmer_deets$Sequence %in% kmersAll$Sequence),]
 kmersAll = kmersAll[match(kmer_deets$Sequence, kmersAll$Sequence),]
 all.equal(kmer_deets$Sequence, kmersAll$Sequence)

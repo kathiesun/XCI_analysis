@@ -1,22 +1,21 @@
 options(stringsAsFactors = FALSE)
 library(tidyverse)
 
-setwd("C:/Users/Kathie/Dropbox (ValdarLab)/MaternalDiet/XCI_paper")
-
+setwd("XCI_analysis")
 source("ase_summary_source.R")
 source("jags_kmers_source.R")
 
 
 #########################################
 
-xce_map = read.csv("data/demographic_info/xce_info_CC.csv")
-cegs_demo = read.csv("data/demographic_info/summary_cegs-mnt_data.csv")
+xce_map = read.csv("../data/demographic_info/xce_info_CC.csv")
+cegs_demo = read.csv("../data/demographic_info/summary_cegs-mnt_data.csv")
 cegs_demo = cegs_demo[grep("CC", cegs_demo$RRIX),]
 cegs_demo$sex = "F"
 cegs_demo = cegs_demo %>% rename("sample"="Pup.ID","cross"="CCs", "treatment"="Diet",
                                  "mat_CC"="CC1", "pat_CC"="CC2","ccc"="CC_lab") 
 
-count_files <- list.files("data/kmer_data/SP2_counts", pattern = ".csv", full.names=T)
+count_files <- list.files("../data/kmer_data/SP2_counts", pattern = ".csv", full.names=T)
 rem_string = c("_2020-01-10","_ref","_alt",".csv","XCounts_")
 cegs_pups = gsub(paste(rem_string, collapse="|"), "", count_files)
 cegs_pups = unlist(lapply(cegs_pups, function(x) strsplit(x, "/")[[1]][length(strsplit(x,"/")[[1]])]))
@@ -26,10 +25,10 @@ colnames(cegs_strains) = c("iidsht","cross_rna")
 cegs_strains$cross_rna = gsub("[A-Z]", "", cegs_strains$cross_rna)
 
 #####  founder blocks from mrcas  #####
-hap_pat <- readRDS("data/demographic_info/SP2_haplotype_data.rds")
+hap_pat <- readRDS("../data/demographic_info/SP2_haplotype_data.rds")
 
 #####  X chr snps
-snps = readRDS("data/kmer_data/all_kmers_chrX.rds")[[1]]
+snps = readRDS("../data/kmer_data/all_kmers_chrX.rds")[[1]]
 
 ref_counts_f <- count_files[grep("ref", count_files)]
 alt_counts_f <- count_files[grep("alt", count_files)]
