@@ -48,9 +48,12 @@ data_kmers_lst[[paste(c)]] = process_and_plot(chr=c,
                                               use_gene=F,
                                               problemPups = c(1404, 1716, 1371, 569, 1911, 1951, 1015),
                                               seg_regions=seg_regions)
-ratios_lst = list()
-ratios_lst[[paste(c)]] = run_jags_regress(data=data_kmers_lst[[paste(c)]], 
-                                          niter=50000, n.thin=5,  
+
+data_kmers = data_kmers_lst[[paste(c)]]
+
+
+ratios_lst[[paste(c)]] = run_jags_regress(data_kmers=data_kmers, 
+                                          niter=5000, n.thin=5,  
                                           seg_regions=seg_regions,
                                           save_dir=NULL,
                                           STZ=T, use_gene=F,

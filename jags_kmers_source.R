@@ -12,17 +12,28 @@ run_jags_regress <- function(data_kmers,
                              seg_regions=NULL,
                              reg=NULL,
                              save_dir=NULL,
-                             STZ=T, use_gene=F,#no_gene=F, 
-                             no_theta=F, alpha=NULL){
+                             STZ=T, use_gene=F,
+                             no_theta=F, alpha=NULL,
+                             cond=NULL){
   reg <- list()
   for(i in sort(unique(data_kmers$RRIX))){
     testPups <- as.vector(t(data_kmers %>% ungroup() %>%
-                              filter(RRIX == i) %>%            #, !Pup.ID %in% problemPups
+                              filter(RRIX == i) %>%            
                               dplyr::select("Pup.ID") %>% distinct()))
     testData <- data_kmers %>% filter(Pup.ID %in% testPups)
     chr = unique(testData$seq.Chromosome)
+    testData$PORIX = testData$RIX
+    testData$PODIETRIX = paste(testData$DietRIX, testData$dir, sep="_")
+    testData$PODIETRIX = factor(testData$PODIETRIX, 
+                                levels=apply(data.frame(expand.grid(sort(unique(testData$Diet)), sort(unique(testData$RRIX)), sort(unique(testData$dir)))),
+                                             1, function(x) paste(x,collapse="_")))
+    getCond = table((testData %>% select(PODIETRIX, Pup.ID) %>% distinct())$PODIETRIX)
     
-    #colnames(testData) <- toupper(colnames(testData))
+    terms <- c("dir", "Diet", "DietRIX","RRIX", "PODIETRIX")
+    cond = "PODIETRIX"
+    if(any(getCond == 1)){
+      terms = cond = "RRIX"
+    }
     if(!is.null(seg_regions) & chr!= "X"){
       use_region = seg_regions[[paste(i)]] %>% filter(Chr == c)
       rem = c()
@@ -32,12 +43,13 @@ run_jags_regress <- function(data_kmers,
       }
       if(length(rem)>0) testData = testData[-rem,]
     }
-    terms <- c("dir", "Diet", "DietRIX","RRIX")
     reg[[paste0("rix_",i)]] <- jags.genes.run(data=testData, mu_g0=0.5, niter=niter, n.thin=n.thin, 
                                               nchains=2, terms=terms, STZ=STZ, use_gene=use_gene, 
-                                              no_theta=no_theta, alpha=alpha,                         #no_gene=no_gene, 
+                                              no_theta=no_theta, alpha=alpha, quant=NULL, tau=NULL, 
+                                              cond=cond, 
                                               TIMBR=F, C_diet_4=C_diet_4, C_diet_2=C_diet_2,C_diet_3=C_diet_3)
   }
+  
   return(reg) 
 }
 
@@ -45,7 +57,6 @@ run_jags_regress <- function(data_kmers,
 ############# encoding stuff #################
 getEncoding <- function(df, terms){
   encoded <- data.frame()
-  #if(length(grep("gene", terms)) > 0) terms = terms[-grep("gene", terms)]
   for(i in 1:length(terms)){
     
     var <- toupper(paste(terms[i]))
@@ -54,8 +65,7 @@ getEncoding <- function(df, terms){
       useLev = unique(df[,ind])
       if(!is.null(levels(df[,ind]))) useLev = levels(df[,ind])[which(levels(df[,ind]) %in% useLev)]
       
-      #vec <- factor(t(df[,ind]), levels=useLev)
-      len <- length(unlist(useLev))       #length(levels(as.factor(vec)))
+      len <- length(unlist(useLev))       
       tempdf <- data.frame(Level = as.character(paste(unlist(useLev))), 
                            Index = 1:len, 
                            Variable = rep(var,len))
@@ -68,189 +78,6 @@ getEncoding <- function(df, terms){
 Mode <- function(x) {
   ux <- unique(x)
   ux[which.max(tabulate(match(x, ux)))]
-}
-
-################## STZ model ########################
-
-makeSTZModel <- function(diet=T, RIX=T, PORIX=T, singleRIX=F, 
-                         two_diets=F, use_gene=F, no_theta=F, 
-			                   alpha=NULL,tau=NULL, 
-			                   STZ=T, quant=NULL,
-			                   add_impute = NULL){
-  if(is.numeric(alpha)){
-    alpha_str <- paste0("alpha=", alpha)
-  } else if(is.character(alpha)){
-    alpha_str = alpha
-  } else {
-    #alpha_str = "alpha ~ dunif(1E-3,1E3)"
-    alpha_str = "alpha ~ dgamma(0.01, 0.01)"
-    
-  }
-  if(is.numeric(tau)){
-    tau_str <- paste0("tau2=", tau)
-  } else if(is.character(tau)){
-    tau_str = tau
-  } else {
-    #tau_str = "tau2 ~ dunif(1E-3,1E3)"
-    tau_str = "tau2 ~ dgamma(0.01, 0.01)"
-    
-  }
-  baseMod1 <- "model {
-  for(i in 1:length(y_gk)){
-    y_gk[i] ~ dbin(mu_g[indG[i]], N_gk[i])
-  }\n"
-  baseMod1_ng <- "model {
-  for(i in 1:length(y_gk)){
-    y_gk[i] ~ dbin(mu_p[indP[i]], N_gk[i])
-  }\n"
-  baseMod2 <- paste("for(g in 1:nG){
-    mu_g[g] ~ dbeta((mu_p[indP[g]]*alpha), ((1-mu_p[indP[g]])*alpha))T(0.001,0.999)                      
-  }", 
-  alpha_str, sep="\n")
-  
-  baseMod2_ng = ""
-  
-  baseMod3 = "\nfor(r in 1:nRIX){\n
-  mu_r[r] ~ dbeta(1,1)
-  b0[r] = log(mu_r[r]/(1-mu_r[r]))
-  }\n"
-  
-  baseMod4 = "\nfor(p in 1:nP){
-  mu_p[p] <- exp(eta[p])/(1+exp(eta[p]))
-  eta[p] ~ dnorm(theta[p], tau2)
-  theta[p] <- b0[indRIX[p]]"
-  
-  
-  modRIX <- "+ b_RIX[indRIX[p]]" 
-  modPORIX <- "+ PO[p]*b_PORIX[indRIX[p]]"
-  modDietPORIX <- "+ PO[p]*(XC[p,] %*% a_dietPORIX[,indRIX[p]])"
-  modD <- ifelse(is.null(quant), "", "+ D[p]*b_D")
-  baseMod4.1 = paste0("\n}\n",tau_str)
- 
-
-  if(STZ){
-    modDiet <- "+ XC[p,] %*% a_diet"
-    modDiet2 <- "\nprec_diet ~ dgamma(0.001, 0.001)   
-  for(i in 1:(nDiet-1)){
-    a_diet[i,1] ~ dnorm(0, prec_diet)
-  }\n"
-    modDiet2 <- "\nfor(i in 1:(nDiet-1)){
-    a_diet[i,1] ~ dnorm(0, 0.0001)
-  }\n"
-  } else {
-    modDiet <- "+ b_diet[indDiet[p]]"
-    modDiet2 <- "\nb_diet[1] <- 0
-  prec_diet ~ dgamma(0.001, 0.001)   
-  for(i in 2:nDiet){
-    b_diet[i] ~ dnorm(0, prec_diet)
-  }\n"
-    modDiet2 <- "\nb_diet[1] <- 0
-  for(i in 2:nDiet){
-    b_diet[i] ~ dnorm(0, 0.0001)
-  }\n"
-  }
-
-  modDiet3 = modDiet3_TD = modDietPORIX3 = modDietPORIX3_TD = ""
-
-  if(diet & STZ){
-    modDiet3 <- "b_diet <- C_diet %*% a_diet \n"
-    modDiet3_TD <- "b_diet <- C_diet * a_diet \n"
-    if(PORIX){
-      modDietPORIX3 <- "b_dietPORIX <- C_diet %*% a_dietPORIX \n"
-      modDietPORIX3_TD <- "b_dietPORIX <- C_diet * a_dietPORIX \n"
-    }
-  }
-
-  #baseMod1_ng <- paste0("model {\n",
-  #tau_str, 
-  #"\nb0 ~ dnorm(0, 0.001)
-  #for(p in 1:nP){
-  #  eta[p] ~ dnorm(theta[p], 1/tau_2)
-  #  theta[p] <- b0")
-  
-  baseMod1_nt <- paste0("model {
-  for(g in 1:nG){
-    mu_g[g] ~ dbeta((mu[indP[g]]*alpha), ((1-mu[indP[g]])*alpha))T(0.001,0.999)                      
-  }\n", alpha_str,
-  "\nb0 ~ dnorm(0,1)
-  for(p in 1:nP){
-    eta[p] <- b0")
-  
-  baseMod1_nt <- paste0("model {
-  for(g in 1:nG){
-    mu_g[g] ~ dbeta((mu[indP[g]]*alpha)+1, ((1-mu[indP[g]])*alpha)+1)T(0.001,0.999)                      
-  }\n", alpha_str,#b0 ~ dnorm(0,1)
-  "\n", tau_str,
-  "\nmu_r ~ dbeta(1,1)",
-  "\nb0 = log(mu_r/(1-mu_r))")
-  
-  
-  modRIX2 <- "prec_RIX ~ dgamma(0.001, 0.001)
-  for(i in 1:nRIX){
-    b_RIX[i] ~ dnorm(0, prec_RIX)
-  }\n"
-  
-  modRIX2 <- "for(i in 1:nRIX){
-    b_RIX[i] ~ dnorm(0, 0.0001)
-  }\n"
-
-  modPORIX2 <- "prec_PORIX ~ dgamma(0.001, 0.001)
-  for(i in 1:nRIX){
-    b_PORIX[i] ~ dnorm(0, prec_PORIX)
-  }\n"
-  
-  modPORIX2 <- "for(i in 1:nRIX){
-    b_PORIX[i] ~ dnorm(0, 0.0001)
-  }\n"
-  
-  modDietPORIX2 <- "prec_dietPORIX ~ dgamma(0.001, 0.001)
-  for(r in 1:nRIX){
-    for(i in 1:(nDiet-1)){
-      a_dietPORIX[i,r] ~ dnorm(0, prec_dietPORIX)
-    }
-  }\n"
-  modDietPORIX2 <- "for(r in 1:nRIX){
-    for(i in 1:(nDiet-1)){
-      a_dietPORIX[i,r] ~ dnorm(0, 0.0001)
-    }
-  }\n"
-  
-  
-  single_modPORIX2 <- "b_PORIX ~ dnorm(0, 0.0001)\n"
-
-  if(singleRIX){
-    modRIX = modRIX2 = ""
-    modPORIX2 = single_modPORIX2
-  }
-  
-  if(two_diets){
-    modDiet3 = modDiet3_TD
-    modDietPORIX3 = modDietPORIX3_TD
-  }
-  if(!diet) modDiet = modDiet2 = ""
-  if(!RIX) modRIX = modRIX2 = ""
-  if(!PORIX) modPORIX = modPORIX2 = ""
-  if(any(c(!diet, !PORIX))){        #, !(RIX|singleRIX), , singleRIX
-    modDietPORIX = modDietPORIX3 = modDietPORIX2 = ""
-  } 
-  if(use_gene){
-    baseMod1 = baseMod1_ng
-    baseMod2 = baseMod2_ng
-  }
-  if(no_theta){
-    baseMod1 = baseMod1_nt
-  }
-  baseMod_D = ""
-  if(!is.null(quant)){
-    baseMod_D = "\nprec_D ~ dgamma(0.001, 0.001)   
-      b_D ~ dnorm(0, prec_D)"
-    baseMod_D = "\nb_D ~ dnorm(0, 0.001)"
-  }
-  
-  return(paste0(baseMod1, add_impute, baseMod2, baseMod3, 
-                baseMod4, modDiet, modPORIX, modDietPORIX, modD, baseMod4.1,     #modRIX,
-                modDiet2, modDiet3, modPORIX2, modDietPORIX2, modDietPORIX3, baseMod_D, #modRIX2, 
-                "\n}"))
 }
 
 
@@ -293,7 +120,7 @@ array.summarize <- function(array, labels=NULL){
         do.call("rbind", lapply(x, function(y) c(Mode(unlist(y)), mean(unlist(y)), median(unlist(y))))) )
       means <- do.call("rbind", means)
       colnames(means) <- c("Mode","Mean","Median")  
-    
+      
     } else {
       est_comb <- lapply(array, unlist)
       sep_int <- lapply(est_comb, function(x){
@@ -302,10 +129,7 @@ array.summarize <- function(array, labels=NULL){
     
     sep_int <- do.call("rbind", sep_int)
     colnames(sep_int)[1:2] <- c(paste0("lower.", nchains), paste0("upper.", nchains))
-    
-    #sep_ints <- sapply(1:dim(array)[1], function(x) HPDinterval(as.mcmc.list(array)), simplify=F)
-    #names(sep_ints) <- paste0("ints",seq(1:nchains))
-    #sep_int <- do.call("cbind", sep_ints)
+
     if(is.null(comb_int)){
       comb_int <- lapply(est_comb, function(x) HPDinterval(as.mcmc(unlist(x))))
       comb_int <- do.call("rbind", comb_int)
@@ -315,7 +139,7 @@ array.summarize <- function(array, labels=NULL){
       means <- do.call("rbind", means)
       colnames(means) <- c("Mode","Mean","Median")
     }
-  
+    
     summary <- cbind(means, comb_int, sep_int)
     if(is.null(labels) | is.null(nme)){
       if(is.null(rownames(summary))) rownames(summary) <- seq(1:dim(array[[i]])[1])
@@ -360,11 +184,11 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
                            P0=1, Q0=1, STZ=TRUE, use_gene=F, gamma = F, 
                            no_theta=FALSE, alpha=NULL, tau=NULL, TIMBR=F, 
                            C_diet_4=NULL, C_diet_2=NULL,C_diet_3=NULL,
-                           add_impute=NULL){
+                           add_impute=NULL, cond=NULL){
   
   colnames(data) <- toupper(colnames(data))
   
-  encodeKmers <- unique(getEncoding(df = data, term = c(terms,"PUP.ID","SEQ.GENE","PUP_GENE")))
+  encodeKmers <- unique(getEncoding(df = data, term = unique(c(terms,"PUP.ID","SEQ.GENE","PUP_GENE"))))
   
   data$PUP.ID <- factor(data$PUP.ID, encodeKmers$Level[which(encodeKmers$Variable == "PUP.ID")])
   data %>% ungroup() %>% arrange(PUP.ID) -> data
@@ -379,6 +203,22 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
     distinct() %>%
     ungroup() %>%
     mutate(INDG=seq(n())) -> merge_indG
+  
+  if(!is.null(cond)){
+    if(!is.null(quant)){
+      if(quant%in% cond) cond = cond[-match(quant, cond)]
+    }
+    data %>%
+      dplyr::select(one_of(paste(cond))) %>%
+      arrange(get(cond)) %>%
+      distinct() %>%
+      ungroup() %>%
+      mutate(INDC=seq(n())) %>%
+      right_join(data[,c("PUP.ID", paste(cond))]) %>%
+      distinct() -> merge_indC
+    
+    data = data %>% left_join(merge_indC, by = c("PUP.ID", paste(cond)))
+  }
   
   merge_indG$indP = as.numeric(merge_indG$PUP.ID)
   
@@ -399,7 +239,7 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
   if(length(unique(data$RRIX)) > 1){
     use_RIX = T
     singleRIX = F
-    terms = c(terms, "RRIX")
+    terms = unique(c(terms, "RRIX"))
   }
   
   data %>% group_by(SEQ.GENE, PUP.ID) %>%
@@ -407,7 +247,11 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
     arrange(PUP.ID, SEQ.GENE) %>%
     left_join(merge_indP, by="PUP.ID") %>%
     left_join(merge_indG, by = c("SEQ.GENE", "PUP.ID")) -> gene_tot
-
+  
+  if(!is.null(cond)){
+    gene_tot = gene_tot %>% left_join(merge_indC, by = c("PUP.ID")) 
+  }
+  
   if(use_gene){
     y_gk = gene_tot$sum_fin1
     N_gk = gene_tot$sumTot
@@ -418,37 +262,54 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
     N_gk <- data$SUM
     indG <- data$INDG
     indP = data$INDP
-    indP = merge_indG$indP
+    indP = gene_tot$INDP
   }
-
+  
+  if(!is.null(cond)){
+    indC = merge_indC$INDC[unique(indP)]
+  } else {
+    indC = vector(rep(1, length(unique(indP))))
+  }
+  
   nG <- length(unique(indG))
   nP <- length(unique(data$PUP.ID))
+  nC <- length(unique(indC))
+  
   
   mu_0 <- mean(y_gk/N_gk)
   tau_0 <- 1/var(y_gk/N_gk)
   
   betaStuff <- c()
   beta_0 <- list(mu_r = rep(0.5, length(unique(data$RRIX))))  
-
+  
   dataStuff = list("y_gk" = y_gk, "N_gk" = N_gk, 
                    "nP" = nP, "indP" = indP)
+  if(!is.null(cond)){
+    dataStuff$nC = nC
+    dataStuff$indC = indC
+  }
   if(!use_gene){
     dataStuff$nG = nG
     dataStuff$indG = indG
   }
-
+  
   indArray = NULL
   if(!is.null(terms)){
     data %>% dplyr::select(one_of("PUP.ID",toupper(terms),quant)) %>%
       dplyr::select(-contains("PUP_GENE")) %>%
       distinct() -> index
-    
+    indexPup = index
     indArray <- as.data.frame(sapply(colnames(index), function(x){
       as.numeric(factor(as.vector(t(index[,paste(x)])), 
                         levels=encodeKmers$Level[which(encodeKmers$Variable == x)]))
     }))
+    indArrayPup=indArray
+    if(!is.null(cond)){
+      indArray = indArray %>% select(-"PUP.ID") %>% distinct()
+      index = index %>% select(-"PUP.ID") %>% distinct()
+    }
     
-    if(length(quant) > 0) indArray[,quant] = index[,quant]
+    if(length(quant) > 0) indArrayPup[,quant] = indexPup[,quant]
     
     if(length(grep("PO|DIR", toupper(terms))) > 0) use_PORIX=T
     if(length(grep("DIET", toupper(terms))) > 0) use_diet=T
@@ -464,7 +325,7 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
       
       if(length(unique(PO)) == 1) use_PORIX = F
       
-      indPORIX = indRIX = indArray$RRIX
+      indPORIX = indRIX = indArrayPup$RRIX
       if(is.null(indPORIX)) indPORIX = rep(1, length(PO))
       nRIX = length(unique(indPORIX))
       
@@ -474,15 +335,15 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
       betaStuff <- c(betaStuff, "b_PORIX")
       dataStuff <- c(dataStuff, list("PO" = PO, "nRIX" = nRIX, "indRIX" = indRIX))
     }
-
+    
     
     
     if(!use_RIX & singleRIX) {
-      indArray$RRIX <- rep(1, nrow(indArray))
-      dataStuff$indRIX = indArray$RRIX
+      indArrayPup$RRIX <- rep(1, nrow(indArrayPup))
+      dataStuff$indRIX = indArrayPup$RRIX
       dataStuff$nRIX = 1
     } else if(use_RIX){
-      dataStuff$indRIX = indArray$RRIX
+      dataStuff$indRIX = indArrayPup$RRIX
       dataStuff$nRIX = length(unique(dataStuff$indRIX))
     }
     
@@ -491,7 +352,7 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
       nDiet = length(unique(indDiet))
       
       if (any(is.na(indDiet))) nDiet = length(unique(indDiet[-which(is.na(indDiet))]))
-
+      
       if(nDiet < 3) two_diets = T
       
       X_diet = matrix(0, nrow=length(indDiet), ncol=nDiet)
@@ -502,7 +363,7 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
         require(TIMBR)
         C_diet = TIMBR:::sumtozero.contrast(nDiet)
       } else {
-	      C_diet = as.matrix(get(paste0("C_diet_",nDiet)))
+        C_diet = as.matrix(get(paste0("C_diet_",nDiet)))
       }
       XC <- X_diet %*% C_diet
       betaStuff <- c(betaStuff, "b_diet")  
@@ -528,20 +389,18 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
         nDietRIX = length(unique(indDietRIX))
         beta_0$b_dietPORIX=c(NA, rep(0, nDietRIX-1))
       }
-
+      
       betaStuff <- c(betaStuff, "b_dietPORIX")    
     }
-    if(!identical(unique(data$PUP.ID), unique(index$PUP.ID))) warning("Check Pup.ID order")
-    
-  } 
+  }
   use_impute = NULL
   
   if(!is.null(quant)){
-    D = as.vector(unlist(index[,quant]))
+    D = as.vector(unlist(indexPup[,quant]))
     
     beta_0$b_D = 0
     betaStuff <- c(betaStuff, "b_D")
-
+    
     if(any(is.na(D))){
       dataStuff$D_temp = D + 0.5
       use_impute = add_impute
@@ -551,9 +410,9 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
     }
     
   }
-  useModel <- makeSTZModel(use_diet, use_RIX, use_PORIX, singleRIX, two_diets, use_gene, no_theta, alpha, tau, STZ, quant,
-                           add_impute = use_impute)
-
+  useModel <- makeSTZModel(diet=use_diet, RIX=use_RIX, PORIX=use_PORIX, 
+                           singleRIX, two_diets, use_gene, no_theta, alpha, tau, cond,
+                           STZ, quant,add_impute = use_impute)
   alphastr <- ifelse(!no_theta, "theta", 
                      ifelse(length(grep("dgamma", alpha))>0, "dgamma", 
                             ifelse(length(grep("dunif", alpha))>0, "alpha", 
@@ -561,13 +420,11 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
                                           paste(unlist(strsplit(as.character(alpha)," ","")), collapse="")))))
   write.table(useModel, paste0("makeModelTemp_",alphastr,niter,".txt"), quote = F, row.names = F, col.names = F)
   
-  # check: cat(makeSTZModel(use_diet, use_RIX, use_PORIX, singleRIX, tau="sfsdf"))
-
-  jags.params <- c("tau2","mu_p","mu_r",betaStuff)  
+  jags.params <- c("mu_p","mu_r",betaStuff)   #"tau2",
   
   if(gamma) jags.params <- c("P", "Q", "mu_g")
-  jags.init <- list("tau2"=tau_0)
-
+  jags.init <- list()     #"tau2"=tau_0
+  
   if(!use_gene){
     jags.params = c(jags.params, "mu_g")
     jags.init$mu_g = rep(mu_g0, nG)
@@ -577,8 +434,9 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
   
   if(gamma) jags.init <- list("P"=rep(P0,nP), "Q"=rep(Q0,nP), "mu_g"=rep(mu_g0, nG))
   if(length(grep("alpha~", gsub(" " ,"", useModel))) > 0){
-    jags.params <- c(jags.params, "alpha") 
-    jags.init[["alpha"]] = tau_0     #t20
+    jags.params <- c(jags.params, "alpha","alpha0","mu_c") 
+    jags.init[["alpha"]] = tau_0        #tau_0     #t20
+    jags.init[["alpha0"]] = 10        #rep(tau_0,nP)
   }
   
   jags <- jags.model(paste0("makeModelTemp_",alphastr,niter,".txt"),
@@ -593,7 +451,8 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
                      thin = n.thin, 
                      jags.params,
                      niter)
-
+  
+  
   if(gamma){
     mu.est <- as.mcmc.list(res$P/(res$P+res$Q)) 
   } else {
@@ -606,9 +465,201 @@ jags.genes.run <- function(data, mu_g0=0.5, t20=0.001, n.thin=1,
   }
   covarSummary <- array.summarize(res, encodeKmers)
   
-  return(list(res=res,
+  return(list(res=res, data = list(data = dataStuff, inits = jags.init),
               codes = encodeKmers, indices = indArray, 
               model=useModel, summary = covarSummary))
 }
 
+
+################## STZ model ########################
+
+makeSTZModel <- function(diet=T, RIX=T, PORIX=T, singleRIX=F, 
+                         two_diets=F, use_gene=F, no_theta=F, 
+                         alpha=NULL,tau=NULL,cond=NULL, 
+                         STZ=T, quant=NULL,
+                         add_impute = NULL){
+  if(is.numeric(alpha)){
+    alpha_str  <- paste0("alpha=", alpha)
+    alpha0_str <- paste0("alpha0=", alpha)
+  } else if(is.character(alpha)){
+    alpha_str  = alpha
+    alpha0_str = alpha
+  } else {
+    alpha_str  = "alpha ~ dgamma(0.01, 0.01)"
+    alpha0_str = "alpha0 ~ dunif(1,1000)"
+  }
+  if(is.numeric(tau)){
+    tau_str <- paste0("tau2=", tau)
+  } else if(is.character(tau)){
+    tau_str = tau
+  } else {
+    tau_str = "tau2 ~ dgamma(0.01, 0.01)"
+  }
+  baseMod_kmer <- "model {
+  for(i in 1:length(y_gk)){
+    y_gk[i] ~ dbin(mu_g[indG[i]], N_gk[i])
+  }\n"
+  baseMod_kmer_ng <- "model {
+  for(i in 1:length(y_gk)){
+    y_gk[i] ~ dbin(mu_p[indP[i]], N_gk[i])
+  }\n"
+  baseMod_gene <- paste("for(g in 1:nG){
+    mu_g[g] ~ dbeta((mu_p[indP[g]]*alpha), ((1-mu_p[indP[g]])*alpha)) T(0.001,0.999)                      
+  }", alpha_str, sep="\n")
+  
+  baseMod_gene_ng = ""
+  
+  baseMod_rix = "\nfor(r in 1:nRIX){
+  mu_r[r] ~ dbeta(1,1) T(0.001,0.999)
+  b0[r] = log(mu_r[r]/(1-mu_r[r]))
+  }\n"
+  
+  baseMod_cond = "\nfor(c in 1:nC){
+  mu_c[c] = exp(eta_c[c]) / (1+exp(eta_c[c]))
+  eta_c[c] <- b0[indRIX[c]]"
+  
+  modRIX <- "+ b_RIX[indRIX[p]]" 
+  modPORIX <- "+ PO[p]*b_PORIX[indRIX[p]]"
+  modDietPORIX <- "+ PO[p]*(XC[p,] %*% a_dietPORIX[,indRIX[p]])"
+  modD <- ifelse(is.null(quant), "", "+ D[p]*b_D")
+  baseMod_addtau = paste0("\n}\n",tau_str)
+  
+  if(STZ){
+    modDiet <- "+ XC[p,] %*% a_diet"
+    modDiet2 <- "\nprec_diet ~ dgamma(0.01, 0.01)   
+  for(i in 1:(nDiet-1)){
+    a_diet[i,1] ~ dnorm(0, prec_diet)
+  }\n"
+    modDiet2 <- "\nfor(i in 1:(nDiet-1)){
+    a_diet[i,1] ~ dnorm(0, 0.0001)
+  }\n"
+  } else {
+    modDiet <- "+ b_diet[indDiet[p]]"
+    modDiet2 <- "\nb_diet[1] <- 0
+  prec_diet ~ dgamma(0.01, 0.01)   
+  for(i in 2:nDiet){
+    b_diet[i] ~ dnorm(0, prec_diet)
+  }\n"
+    modDiet2 <- "\nb_diet[1] <- 0
+  for(i in 2:nDiet){
+    b_diet[i] ~ dnorm(0, 0.0001)
+  }\n"
+  }
+  
+  baseMod_pup = "\nfor(p in 1:nP){
+  mu_p[p] <- exp(eta[p])/(1+exp(eta[p]))
+  eta[p] ~ dnorm(theta[p], tau2)
+  theta[p] <- b0[indRIX[p]]"
+  
+  
+  modDiet3 = modDiet3_TD = modDietPORIX3 = modDietPORIX3_TD = ""
+  
+  if(diet & STZ){
+    modDiet3 <- "b_diet <- C_diet %*% a_diet \n"
+    modDiet3_TD <- "b_diet <- C_diet * a_diet \n"
+    if(PORIX){
+      modDietPORIX3 <- "b_dietPORIX <- C_diet %*% a_dietPORIX \n"
+      modDietPORIX3_TD <- "b_dietPORIX <- C_diet * a_dietPORIX \n"
+    }
+  }
+
+  baseMod1_nt <- paste0("model {
+  for(g in 1:nG){
+    mu_g[g] ~ dbeta((mu[indP[g]]*alpha), ((1-mu[indP[g]])*alpha)) T(0.001,0.999)                      
+  }\n", alpha_str,
+                        "\nb0 ~ dnorm(0,0.0001)
+  for(p in 1:nP){
+    eta[p] <- b0")
+  
+  baseMod1_nt <- paste0("model {
+  for(g in 1:nG){
+    mu_g[g] ~ dbeta((mu[indP[g]]*alpha)+1, ((1-mu[indP[g]])*alpha)+1) T(0.001,0.999)                      
+  }\n", alpha_str,
+  "\n", tau_str,
+  "\nmu_r ~ dbeta(1,1 T(0.001,0.999))",
+  "\nb0 = log(mu_r/(1-mu_r))")
+  
+  
+  modRIX2 <- "prec_RIX ~ dgamma(0.01, 0.01)
+  for(i in 1:nRIX){
+    b_RIX[i] ~ dnorm(0, prec_RIX)
+  }\n"
+  
+  modRIX2 <- "for(i in 1:nRIX){
+    b_RIX[i] ~ dnorm(0, 0.0001)
+  }\n"
+  
+  modPORIX2 <- "prec_PORIX ~ dgamma(0.01, 0.01)
+  for(i in 1:nRIX){
+    b_PORIX[i] ~ dnorm(0, prec_PORIX)
+  }\n"
+  
+  modPORIX2 <- "for(i in 1:nRIX){
+    b_PORIX[i] ~ dnorm(0, 0.0001)
+  }\n"
+  
+  modDietPORIX2 <- "prec_dietPORIX ~ dgamma(0.01, 0.01)
+  for(r in 1:nRIX){
+    for(i in 1:(nDiet-1)){
+      a_dietPORIX[i,r] ~ dnorm(0, prec_dietPORIX)
+    }
+  }\n"
+  modDietPORIX2 <- "for(r in 1:nRIX){
+    for(i in 1:(nDiet-1)){
+      a_dietPORIX[i,r] ~ dnorm(0, 0.0001)
+    }
+  }\n"
+  
+  single_modPORIX2 <- "b_PORIX ~ dnorm(0, 0.0001)\n"
+  
+  if(singleRIX){
+    modRIX = modRIX2 = ""
+    modPORIX2 = single_modPORIX2
+  }
+  
+  if(two_diets){
+    modDiet3 = modDiet3_TD
+    modDietPORIX3 = modDietPORIX3_TD
+  }
+  if(!diet) modDiet = modDiet2 = ""
+  if(!RIX) modRIX = modRIX2 = ""
+  if(!PORIX) modPORIX = modPORIX2 = ""
+  if(any(c(!diet, !PORIX))){        #, !(RIX|singleRIX), , singleRIX
+    modDietPORIX = modDietPORIX3 = modDietPORIX2 = ""
+  } 
+  if(use_gene){
+    baseMod_kmer = baseMod1_kmer_ng
+    baseMod_gene = baseMod_gene_ng
+  }
+  if(no_theta){
+    baseMod1 = baseMod1_nt
+  }
+  baseMod_D = ""
+  if(!is.null(quant)){
+    baseMod_D = "\nprec_D ~ dgamma(0.01, 0.01)   
+      b_D ~ dnorm(0, prec_D)"
+    baseMod_D = "\nb_D ~ dnorm(0, 0.0001)"
+  }
+  
+  
+  linReg = paste0(modDiet, modRIX, modPORIX, modDietPORIX, modD)
+  
+  if(!is.null(cond)){
+    baseMod_pup = paste("\nfor(p in 1:nP){
+  mu_p[p] ~ dbeta((mu_c[indC[p]]*alpha0), ((1-mu_c[indC[p]])*alpha0)) T(0.001,0.999) 
+  }", alpha0_str, sep="\n")
+    
+    linReg = gsub("[p]","c",linReg)
+    baseMod_cond = paste(baseMod_cond, linReg,"\n}")
+    baseMod_addtau = linReg = ""
+  } else {
+    baseMod_cond = ""
+  }
+  
+  return(paste0(baseMod_kmer, add_impute, baseMod_gene, 
+                baseMod_pup, linReg, baseMod_cond, 
+                baseMod_addtau,    
+                modDiet2, modDiet3, modPORIX2, modDietPORIX2, modDietPORIX3, baseMod_D, baseMod_rix, 
+                "\n}"))
+}
 

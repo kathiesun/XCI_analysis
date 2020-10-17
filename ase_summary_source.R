@@ -23,15 +23,15 @@ process_and_plot <- function(chr,
                              phased_CC_haplotype=NULL, 
                              use_gene=F,
                              problemPups = c(1404, 1716, 1371, 569, 1911, 1951, 1015),
-			                       seg_regions=NULL,
-			                       lb = 99e6, ub=104e6){
+                             seg_regions=NULL,
+                             lb = 99e6, ub=104e6){
   chr <- ifelse(chr == 20, "X", chr)
   chr_num <- ifelse(chr == "X", 20, as.numeric(chr))
   
   #### XO 1015, 1911 and 1951; low RNA-seq 1404, 1716, 1371, 569
   myCounts <- sort_counts(ref_counts, alt_counts)
   if(length(problemPups) > 0) myCounts <- myCounts %>% filter(!Pup.ID %in% problemPups)
-  
+  myCounts$Pup.ID = as.character(myCounts$Pup.ID)
   
   if(is.null(phased_CC_haplotype)){
     phased <- phase_counts(snps=snp_info, counts=myCounts, pupInfo=sample_info, CC_labels=RIX_info,
@@ -52,7 +52,7 @@ process_and_plot <- function(chr,
   } else {
     data_kmers = plotMe$plotMat
   }
-
+  
   data_kmers$RRIX <- as.numeric(gsub("[a-z]","", data_kmers$RIX))
   data_kmers$pup_gene <- paste(data_kmers$Pup.ID, data_kmers$seq.Gene, sep="_")
   data_kmers$Diet <- factor(data_kmers$Diet, levels = sort(unique(data_kmers$Diet))[c(3,1,2,4)])
@@ -203,9 +203,9 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
     CC1_xce_hap = sort(CC1_xce_hap[which(nchar(CC1_xce_hap) > 0)])
     CC2_xce_hap = unique(out[which(xc$seq$seq.Position > lb & xc$seq$seq.Position < ub),2])
     CC2_xce_hap = sort(CC2_xce_hap[which(nchar(CC2_xce_hap) > 0)])
-
+    
     CC1_xce_al = factor(xce_df$xce_al[match(CC1_xce_hap, xce_df$founder)], levels = c("n","a","f","e","z","b","c","d"))
-
+    
     CC2_xce_al = factor(xce_df$xce_al[match(CC2_xce_hap, xce_df$founder)], levels = c("n","a","f","e","z","b","c","d"))
     out$CC1_xce_hap = paste(CC1_xce_hap, collapse="/")
     out$CC2_xce_hap = paste(CC2_xce_hap, collapse="/")
@@ -262,7 +262,7 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
           if(length(unlist(problems)) > 0){
             keep[which(lapply(problems, length) > 0)] <- NA
           }
-
+          
           refs[[j]] <- which(keep %in% c("0","R"))
           alts[[j]] <- which(keep %in% c("1","A"))
         }
@@ -315,7 +315,7 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
       } 
     }
   })
- 
+  
   plotGenes <- lapply(plotList, function(x){
     if(!is.null(x)){
       x %>% 
@@ -333,17 +333,18 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
   })
   plotGenes <- unique(do.call("rbind", plotGenes))
   plotGenes$logSumTot <- log(plotGenes$sumTot)
+  plotGenes$Pup.ID = as.character(plotGenes$Pup.ID)
   
   ### add pup demographic info
   pupInfo$Diet <- gsub(" $","", pupInfo$Diet, perl=T)
-  
+  pupInfo$Pup.ID = as.character(pupInfo$Pup.ID)
   
   plotGenes <- left_join(plotGenes, pupInfo, by="Pup.ID") %>%
     mutate(Xist = if_else(seq.Gene == "Xist", T, F))
   
   plotMat <- unique(do.call("rbind", plotList))
   plotMat$logSum <- log(plotMat$sum)
-  plotMat$Pup.ID <- as.numeric(plotMat$Pup)
+  plotMat$Pup.ID <- as.character(plotMat$Pup)
   
   plotMat <- left_join(plotMat, pupInfo, by="Pup.ID") %>%
     mutate(Xist = if_else(seq.Gene == "Xist", T, F))
@@ -364,7 +365,7 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
   
   plotMat$CC_lab = plotMat$CCs
   plotMat[which(plotMat$which_numer == "right"),"CC_lab"] = apply(do.call("rbind", strsplit(plotMat$CC_lab[which(plotMat$which_numer == "right")],"/"))[,2:1], 1,
-                                                                        function(x) paste(x,collapse="/"))
+                                                                  function(x) paste(x,collapse="/"))
   
   plotGenes$fin1 <- plotGenes$sum1
   plotGenes$fin2 <- plotGenes$sum2
@@ -383,8 +384,8 @@ plot_counts_based_on_founders <- function(snps, counts, pupInfo, CC_labels, lo_b
   
   plotGenes$CC_lab = plotGenes$CCs
   plotGenes[which(plotGenes$which_numer == "right"),"CC_lab"] = apply(do.call("rbind", strsplit(plotGenes$CC_lab[which(plotGenes$which_numer == "right")],"/"))[,2:1], 1,
-                                                                  function(x) paste(x,collapse="/"))
-
+                                                                      function(x) paste(x,collapse="/"))
+  
   return(list(plotMat=plotMat, plotGenes=plotGenes, metrics=NULL))
 }
 
