@@ -228,10 +228,12 @@ for (i in 1:length(unique(cegs_demo$ccc))){
     trts = unique(model_rix$trt)  
     if(length(which(is.na(trts))>0)) trts = trts[-which(is.na(trts))]
     if (length(trts) > 1) quant = "TRT"
+    quant = NULL        ## for no covariates
     niter = 100000 
-    reg[[c]] <- jags.genes.run(data=model_rix, mu_g0=0.5, niter=niter, 
-                               n.thin = 5, quant=quant,  #quant,  
-                               terms=terms, STZ=F, use_gene = F, 
+    reg[[c]] <- jags.genes.run(data=model_rix, mu_g0=0.5, 
+                               #niter=niter, n.thin = 5, 
+                               quant=quant, terms=terms, cond=c("RRIX",quant), 
+                               STZ=F, use_gene = F, 
                                add_impute = "\nfor(p in 1:nP){\nD_temp[p] ~ dbern(0.5)\nD[p] <- -0.5 + D_temp[p]\n}\n")
   }
 }

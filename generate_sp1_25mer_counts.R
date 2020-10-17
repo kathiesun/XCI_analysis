@@ -26,7 +26,7 @@ pupInfo <- allInfo %>% rename("RIX"="RRIX") %>%
   mutate(Diet = gsub(" ","", Diet)) %>%
   filter(RIX %in% c(1:4,6:10), !is.na(Pup.ID)) 
 
-data_kmers_lst = list()
+data_kmers_lst = ratios_lst = list()
 
 c="X"
 
@@ -53,7 +53,7 @@ data_kmers = data_kmers_lst[[paste(c)]]
 
 
 ratios_lst[[paste(c)]] = run_jags_regress(data_kmers=data_kmers, 
-                                          niter=5000, n.thin=5,  
+                                          niter=50000, n.thin=5,  
                                           seg_regions=seg_regions,
                                           save_dir=NULL,
                                           STZ=T, use_gene=F,

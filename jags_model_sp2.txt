@@ -1,0 +1,22 @@
+model {
+  for(i in 1:length(y_gk)){
+    y_gk[i] ~ dbin(mu_g[indG[i]], N_gk[i])
+  }
+for(g in 1:nG){
+    mu_g[g] ~ dbeta((mu_p[indP[g]]*alpha), ((1-mu_p[indP[g]])*alpha)) T(0.001,0.999)                      
+  }
+alpha ~ dgamma(0.01, 0.01)
+for(p in 1:nP){
+  mu_p[p] ~ dbeta((mu_c[indC[p]]*alpha0), ((1-mu_c[indC[p]])*alpha0)) T(0.001,0.999) 
+  }
+alpha0 ~ dunif(1,1000)
+for(c in 1:nC){
+  mu_c[c] = exp(eta_c[c]) / (1+exp(eta_c[c]))
+  eta_c[c] <- b0[indRIX[c]]  
+}
+for(r in 1:nRIX){
+  mu_r[r] ~ dbeta(1,1) T(0.001,0.999)
+  b0[r] = log(mu_r[r]/(1-mu_r[r]))
+  }
+
+}
