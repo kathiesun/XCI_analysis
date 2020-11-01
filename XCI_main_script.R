@@ -42,11 +42,24 @@ hap_pat <- readRDS("../data/demographic_info/SP2_haplotype_data.rds")
 
 ## SP1 regression results
 mnt_regSum = readRDS("../data/regression_outputs/chrX_summary_sp1.rds")
-mnt_df = readRDS("../data/regression_outputs/chrX_data_sp1.rds")
+mnt_df    = readRDS("../data/regression_outputs/chrX_data_sp1.rds")
 
 ## SP2 regression results
-cegs_reg = readRDS("../data/regression_outputs/chrX_regression_sp2.rds")
-cegs_regSum = lapply(cegs_reg, function(x) x$summary)
+cegs_regSum = readRDS("../data/regression_outputs/chrX_summary_sp2.rds")
+cegs_df     = readRDS("../data/regression_outputs/chrX_data_sp2.rds")
+
+
+## combine SP data
+cegs_tmp_df <- rapply(cegs_df, as.character, classes="factor", how="replace")
+mnt_tmp_df  <- rapply(mnt_df, as.character, classes="factor", how="replace")
+colnames(cegs_tmp_df) = toupper(colnames(cegs_tmp_df))
+colnames(mnt_tmp_df) = toupper(colnames(mnt_tmp_df))
+keepCols = colnames(mnt_tmp_df)[match(colnames(cegs_tmp_df), colnames(mnt_tmp_df))]
+keepCols = keepCols[which(!is.na(keepCols))]
+
+df_comb      = rbind(mnt_tmp_df %>% select(keepCols), cegs_tmp_df %>% select(keepCols))
+summary_comb = c(mnt_regSum, cegs_regSum)
+
 
 ## various lookup tables
 xce_df = data.frame(founder = LETTERS[1:8],
@@ -64,12 +77,12 @@ dict = data.frame(let = LETTERS[1:13], num = 1:13,
 pup_skews = do.call("rbind", lapply(mnt_regSum, function(x) x$summary$mu_p))
 pup_skews$Pup.ID = unlist(strsplit(rownames(pup_skews),"[.]"))[c(F,T)]
 
-cegs_skews = do.call("rbind", lapply(cegs_regSum, function(x) x$mu_p))
+cegs_skews = do.call("rbind", lapply(cegs_regSum, function(x) x$summary$mu_p))
 cegs_skews$Pup.ID = unlist(strsplit(rownames(cegs_skews),"[.]"))[c(F,T)]
 
 rix_mnt_skews = do.call("rbind", lapply(mnt_regSum, function(x) x$summary$mu_r))
 rix_mnt_skews$RRIX = unlist(strsplit(rownames(rix_mnt_skews),"_"))[c(F,T)]
-rix_cegs_skews = do.call("rbind", lapply(cegs_regSum, function(x) x$mu_r))
+rix_cegs_skews = do.call("rbind", lapply(cegs_regSum, function(x) x$summary$mu_r))
 rix_cegs_skews$RRIX = rownames(rix_cegs_skews)
 
 rix_skews = rbind(rix_mnt_skews, rix_cegs_skews)
@@ -152,7 +165,7 @@ combine_plot_df$xlab = paste(combine_plot_df$CC_lab, combine_plot_df$hap_grp,
 
 combine_plot_df$CC_lab = gsub("CC","",combine_plot_df$CC_lab)
 
-plot_data = combine_plot_df %>% filter(plot == 0)
+plot_data = combine_plot_df %>% filter(plot == 1)
 
 cols = c("TRUE" = "darkslategray","FALSE" = "tomato3")
 pfin = ggplot(data=plot_data, aes(y=Mean, x=x_val, col=under_50, 
@@ -341,6 +354,7 @@ kmer_deets = kmer_deets[which(kmer_deets$Sequence %in% kmersAll$Sequence),]
 kmersAll = kmersAll[match(kmer_deets$Sequence, kmersAll$Sequence),]
 all.equal(kmer_deets$Sequence, kmersAll$Sequence)
 kmer_deets$Position = kmersAll$Position = kmer_deets$Position/1e6
+
 ## normalize counts by mode or mean
 counts = kmersAll[,grep("_",colnames(kmersAll))]
 colnames(counts) = gsub("^X", "", colnames(counts))
@@ -420,17 +434,21 @@ Ddup = data.frame(start=102.802501, end=102.839301) ## inclusive
 xmin=102.7
 xmax=102.9
   
-make_cnv_plots = function(founder_label = NULL){
+make_cnv_plots = function(founder_label = NULL, kmer_len = 45){
+  Ddup = data.frame(start=102.802501, end=102.839301) ## inclusive
   f = founder_label
   same_range = above_range = below_range = NULL
   centers = c(-1,0,1)
   if(length(grep("F|G", f)) > 0) centers = c(-2,-1,0,1)
+  if(length(grep("E", f)) > 0) centers = c(-1,0,1,2,3)
+  
   k=length(centers)
   plot = normed45_delt %>% filter(founder == f, 
                                   Position > xmin, Position < xmax)#, #overlap=="none")#,
   plot$in_dup = F
   in_dup = which(plot$Position > Ddup$start & plot$Position < Ddup$end)
   plot$in_dup[in_dup] = T
+  
   km_stats = kmeans(data.frame(plot$diff), centers = centers)
   centers = km_stats$centers
   above_0 = which.max(centers)
@@ -443,6 +461,18 @@ make_cnv_plots = function(founder_label = NULL){
   
   centers = centers[c(same, below_0, other, above_0)]
   
+  ## remove centers from duplicated kmers
+  plot$plot_diff = plot$diff
+  if(length(grep("^[A|C|D]", f)) > 0){
+    plot$plot_diff[grep("_with_5",plot$overlap)] = plot$diff[grep("_with_5",plot$overlap)] - centers[length(centers)]
+    plot$plot_diff[grep("6_with_4",plot$overlap)] = plot$diff[grep("6_with_4",plot$overlap)] - centers[length(centers)]
+  } else if(f == "H_ave_delt"){
+    plot$plot_diff[grep("_with_1",plot$overlap)] = plot$diff[grep("_with_1",plot$overlap)] - centers[length(centers)]
+  } else if(f == "E_ave_delt"){
+    plot$plot_diff[grep("_with_5",plot$overlap)] = plot$diff[grep("_with_5",plot$overlap)] - centers[length(centers)]
+    plot$plot_diff[grep("6_with_4",plot$overlap)] = plot$diff[grep("6_with_4",plot$overlap)] - centers[length(centers)-1]
+  }
+ 
   ## colors for k-mean clusters
   ## other comments below for coloring in clusters too
   colors = brewer.pal(2*(k+1), "Paired")  #palette()
@@ -471,13 +501,24 @@ make_cnv_plots = function(founder_label = NULL){
   kmer_bounds$y = rep(c(ymax-0.25, ymax-0.35),ceiling(nrow(kmer_bounds)/2))[1:nrow(kmer_bounds)]
 
   Ddup$y = ymax-0.5
+  if(f == "E_ave_delt") Ddup$end = kmer_bounds$end[6]
+  if(f == "H_ave_delt"){
+    Ddup$start = 102.7302 
+    Ddup$end = kmer_bounds$end[1]
+  }
+  
   title = ifelse(length(grep("sis",f))>0, unique(meta_use$CC[which(meta_use$grp == gsub("_ave_delt","",f))]),
                  unlist(strsplit(f,"_"))[c(T,F)])
+  title_long = data.frame(let = LETTERS[1:8], CC = c("A/J","C57BL/6J","129S1/SvImJ","NOD","NZO","CAST/EiJ","PWK/PhJ","WSB/EiJ"))
+  title = title_long$CC[which(title_long$let == title)]
   sub_nsnps = ifelse(length(grep("F|G", f)) > 0, "", paste0("\n# SNPs: ", nsnps,", ", round(perc_snp,3), "%"))
   sub_nsnps_inDup = ifelse(length(grep("F|G", f)) > 0, "", paste0("\n# SNPs in dup: ", nsnps_inDup,", ", round(perc_snp_inDup,3),"%"))
-  p[[f]] = ggplot(data=plot) +
-    geom_rect(aes(xmin=-Inf, xmax=Inf, ymin=below_range[2], ymax=above_range[1]),fill="gray",col=NA,alpha=0.8) + 
-    geom_point(aes(x=Position, y=diff, col=col, alpha=alpha)) +
+  break_pos = seq(xmin,xmax, by = 0.01)
+  break_lab = break_pos
+  break_lab[grep("[.]", paste(break_pos/0.05))] = ""
+  p = ggplot(data=plot) +
+    geom_rect(aes(xmin=-Inf, xmax=Inf, ymin=same_range[1], ymax=same_range[2]),fill="gray",col=NA,alpha=0.8) + 
+    geom_point(aes(x=Position, y=plot_diff, col=col, alpha=alpha)) +
     geom_segment(data=kmer_bounds, 
                  aes(x=start, xend=end, y=y, yend=y),
                  lineend = "round", linejoin = "bevel",
@@ -486,7 +527,7 @@ make_cnv_plots = function(founder_label = NULL){
                  aes(x=start, xend=end, y=y, yend=y)) + 
     scale_y_continuous(limits = c(ymin, ymax), 
                        breaks=seq(ymin, ymax, 1)) + 
-    scale_x_continuous(breaks = seq(xmin,xmax, by = 0.01)) + 
+    scale_x_continuous(breaks = break_pos, labels = break_lab) + 
     theme_classic() + 
     scale_color_viridis(discrete = TRUE, name ="# copies in ref") + 
     scale_alpha_continuous(NULL,NULL,NULL) +
@@ -494,58 +535,58 @@ make_cnv_plots = function(founder_label = NULL){
     geom_vline(alpha=0.3, col="mediumvioletred", linetype = "dotted",
                xintercept = c(kmer_bounds$start, kmer_bounds$end[-1])) +
     theme(plot.title = element_text(size=10), 
-          plot.subtitle=element_text(size=8, face="italic", color="gray20"),
-          axis.text.x = element_text(angle = 90)) + 
-    labs(title = paste("Inbred B6 counts vs", title),            
-         subtitle = paste("Means:", paste(round(sort(centers), 3), collapse=","),
-                          sub_nsnps,sub_nsnps_inDup), y = "Delta")
+          plot.subtitle=element_text(size=8, face="italic", color="gray20")) + #,
+          #axis.text.x = element_text(angle = 90)) + 
+    labs(y = paste("Inbred C57BL/6J counts -", title)) #,            
+         #subtitle = paste("Means:", paste(round(sort(centers), 3), collapse=","),sub_nsnps,sub_nsnps_inDup))
   
-  return(list(plot = p[[f]], data = plot))
+  return(list(plot = p, data = plot))
 }
   
-
-p = list()
+plts = list()
+pdf("all_CC_CNV_plots.pdf",width=7, height=4)
 for(f in unique(normed45_delt$founder)){
-  p[[f]] = make_cnv_plots(f)
+  plts[[f]] = make_cnv_plots(f)
+  print(plts[[f]]$plot)
 }
-
+dev.off()
 
 ##############################################
 ##        sample-specific proportions       ##
 ##############################################
 
-df=mnt_df
-summary=mnt_regSum
+#df_comb
+#summary_comb
 
 full_df = list()
-for(i in 1:length(unique(df$CC_lab))){
-  cc <- unique(df$CC_lab)[i]
-  rix <- as.numeric(unique(gsub("a|b", "", unique(df$RIX))))[i]
-  chr <- unique(df$seq.Chromosome)
-  rixdat <- df %>% filter(CC_lab == cc) %>%
-    mutate(seq.Position = as.numeric(seq.Position)) %>%
-    arrange(dir, Pup.ID, seq.Position) 
-  rixdat$Pup.ID <- factor(rixdat$Pup.ID, levels=unique(rixdat$Pup.ID))
-  use_sum_ind <- match(rix ,gsub("[A-Z]|_|-", "", toupper(names(summary))))
-  use_sum <- summary[[use_sum_ind]]$summary$mu_p
+for(i in 1:length(unique(df_comb$CC_LAB))){
+  cc <- unique(df_comb$CC_LAB)[i]
+  #rix <- as.numeric(unique(gsub("a|b", "", unique(df$RIX))))[i]
+  chr <- unique(df_comb$SEQ.CHROMOSOME)
+  rixdat <- df_comb %>% filter(CC_LAB == cc) %>%
+    mutate(SEQ.POSITION = as.numeric(SEQ.POSITION)) %>%
+    arrange(DIR, PUP.ID, SEQ.POSITION) 
+  rixdat$PUP.ID <- factor(rixdat$PUP.ID, levels=unique(rixdat$PUP.ID))
+  use_sum_ind <- unique(match(rixdat$RRIX ,gsub("RIX_", "", toupper(names(summary_comb)))))
+  use_sum <- summary_comb[[use_sum_ind]]$summary$mu_p
   use_sum$Pup.ID = rownames(use_sum)
   
-  rixdat$kRat_g <- as.numeric(summary[[use_sum_ind]]$summary$mu_g$Mean[match(rixdat$pup_gene,
-                                                                           rownames(summary[[use_sum_ind]]$summary$mu_g))])
-  rixdat$kLB_g <- as.numeric(summary[[use_sum_ind]]$summary$mu_g$lower[match(paste(rixdat$Pup.ID, rixdat$seq.Gene, sep="_"),
-                                                                           rownames(summary[[use_sum_ind]]$summary$mu_g))])
-  rixdat$kUB_g <- as.numeric(summary[[use_sum_ind]]$summary$mu_g$upper[match(paste(rixdat$Pup.ID, rixdat$seq.Gene, sep="_"),
-                                                                           rownames(summary[[use_sum_ind]]$summary$mu_g))])
+  rixdat$kRat_g <- as.numeric(summary_comb[[use_sum_ind]]$summary$mu_g$Mean[match(rixdat$PUP_GENE,
+                                                                           rownames(summary_comb[[use_sum_ind]]$summary$mu_g))])
+  rixdat$kLB_g <- as.numeric(summary_comb[[use_sum_ind]]$summary$mu_g$lower[match(paste(rixdat$PUP.ID, rixdat$SEQ.GENE, sep="_"),
+                                                                           rownames(summary_comb[[use_sum_ind]]$summary$mu_g))])
+  rixdat$kUB_g <- as.numeric(summary_comb[[use_sum_ind]]$summary$mu_g$upper[match(paste(rixdat$PUP.ID, rixdat$SEQ.GENE, sep="_"),
+                                                                           rownames(summary_comb[[use_sum_ind]]$summary$mu_g))])
   
   colnames(use_sum) = tolower(colnames(use_sum))
-  rixdat$pup_lower <- as.numeric(use_sum$lower[match(rixdat$Pup.ID, use_sum$pup.id)])
-  rixdat$pup_upper <- as.numeric(use_sum$upper[match(rixdat$Pup.ID, use_sum$pup.id)])
-  rixdat$pup_mean <- as.numeric(use_sum$mean[match(rixdat$Pup.ID, use_sum$pup.id)])
-  full_df[[i]] = rixdat
+  rixdat$pup_lower <- as.numeric(use_sum$lower[match(rixdat$PUP.ID, use_sum$pup.id)])
+  rixdat$pup_upper <- as.numeric(use_sum$upper[match(rixdat$PUP.ID, use_sum$pup.id)])
+  rixdat$pup_mean <- as.numeric(use_sum$mean[match(rixdat$PUP.ID, use_sum$pup.id)])
+  full_df[[cc]] = rixdat
 }
 
 full_df = do.call("rbind",full_df)
-full_df$Xist = ifelse(full_df$Xist, "Yes","No")
+full_df$XIST = ifelse(full_df$XIST, "Yes","No")
 
 mvec = c(2422,2138,1656)
 ### 2422 in CC041/CC051, D vs H
@@ -554,21 +595,29 @@ mvec = c(2422,2138,1656)
 
 rixdat = full_df %>% filter(Pup.ID %in% mvec)
 
-p = ggplot(data=rixdat, aes(x=seq.Position, alpha=logSum, color=Xist, shape=factor(dir))) + 
-        geom_point(aes(y = kRat_g)) + #
-        geom_segment(aes(x=seq.Position, xend=seq.Position, y = kLB_g, yend=kUB_g), size=0.5) + 
-        ylab("Ratio") + xlab("Position") +
-        theme_bw() + 
-        scale_shape_discrete(name=NULL, NULL) + 
-        scale_alpha_continuous(name=NULL, NULL) + 
-        scale_x_continuous(labels=function(n){paste(n/1000000, "M")}) +
-        geom_hline(yintercept=0.5, col="#181b34", linetype= "dotted", size=1) + 
-        scale_colour_manual(values=c("#404788ff", "#fde725ff")) +
-        geom_ribbon(aes(x=seq.Position, ymin=pup_lower, ymax=pup_upper), inherit.aes = T, 
-                    alpha=0.2, col="gray") + 
-        geom_hline(aes(yintercept = pup_mean), col="#292d57") + 
-        facet_grid(CC_lab ~ ., scales="free_x") + ylim(c(0,1)) 
-p
+for(c in unique(full_df$CC_LAB)){
+  rixdat = full_df %>% filter(CC_LAB == c)
+  
+  p = ggplot(data=rixdat, aes(x=SEQ.POSITION, alpha=LOGSUM, color=XIST, shape=factor(DIR))) + 
+    geom_point(aes(y = kRat_g)) + #
+    geom_segment(aes(x=SEQ.POSITION, xend=SEQ.POSITION, y = kLB_g, yend=kUB_g), size=0.5) + 
+    ylab("Ratio") + xlab("Position") +
+    ggtitle(c) + 
+    theme_bw() + 
+    scale_shape_discrete(name=NULL, NULL) + 
+    scale_alpha_continuous(name=NULL, NULL) + 
+    scale_x_continuous(labels=function(n){paste(n/1000000, "M")}) +
+    geom_hline(yintercept=0.5, col="#181b34", linetype= "dotted", size=1) + 
+    scale_colour_manual(values=c("#404788ff", "#fde725ff")) +
+    geom_ribbon(aes(x=SEQ.POSITION, ymin=pup_lower, ymax=pup_upper), inherit.aes = T, 
+                alpha=0.2, col="gray") + 
+    geom_hline(aes(yintercept = pup_mean), col="#292d57") + 
+    facet_wrap(PUP.ID ~ ., scales="free_x") + ylim(c(0,1))
+  
+  pdf(paste0("../xce_specific_pups_",gsub("/","_",c),".pdf"), width = 15, height = 16)
+  print(p)
+  dev.off()
+}
 
 ##############################################
 ##         XCI proportions from lit         ##

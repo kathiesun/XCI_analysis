@@ -17,6 +17,15 @@ xce_df = data.frame(founder = LETTERS[1:8],
                     xce_al = c("a","b","a","n","z","c","e","b"))
 
 
+## revComp
+revComp <- function(str){
+  tmp <- unlist(strsplit(str, ""))
+  revd <- rev(toupper(tmp))
+  comp <- lapply(revd, function(x) ifelse(x == "A", "T", ifelse(x == "T", "A", ifelse(x == "G", "C", ifelse(x == "C", "G", "-")))))
+  return(paste(unlist(comp),  collapse=""))
+}
+
+
 process_and_plot <- function(chr, 
                              snp_info, sample_info, RIX_info, 
                              ref_counts, alt_counts, 
