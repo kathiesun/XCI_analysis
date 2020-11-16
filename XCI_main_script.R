@@ -68,7 +68,7 @@ dict = data.frame(let = LETTERS[1:13], num = 1:13,
                   found = c("AJ","B6","129S1","NOD","NZO","CAST","PWK","WSB", "ALS","BALB","DBA","C3H","FVB"),
                   xce = c("a","b","a","n","z","c","e","b","b","a","b","a","f"))
 
-
+colorpal=data.frame(blue="#1278BE", mint="#357559", magenta="#A71F82")
 
 ##################################
 ## sample-wide proportion plots ##
@@ -165,9 +165,11 @@ combine_plot_df$xlab = paste(combine_plot_df$CC_lab, combine_plot_df$hap_grp,
 
 combine_plot_df$CC_lab = gsub("CC","",combine_plot_df$CC_lab)
 
-plot_data = combine_plot_df %>% filter(plot == 1)
+plot_data = combine_plot_df %>% filter(plot == 0)
 
 cols = c("TRUE" = "darkslategray","FALSE" = "tomato3")
+#cols = c("TRUE" = colorpal$blue,"FALSE" = colorpal$magenta)
+
 pfin = ggplot(data=plot_data, aes(y=Mean, x=x_val, col=under_50, 
                                   alpha=rix_sum, shape=shape)) +  
   scale_color_manual(values = cols, name = "As expected?") + 
@@ -641,4 +643,38 @@ ggplot(data = cor_plot, aes(Paternal, Maternal, fill = value))+
   scale_color_manual(values = c("black","white"), NULL, NULL) + 
   theme_bw()+ 
   coord_fixed()
-  
+
+
+
+###############################
+###         alpha0          ###
+###############################
+plot_gams = read.csv("../supp/TableS2_alpha0.csv")
+
+for(i in 1:nrow(plot_gams)){
+  if(i == 1){
+    lwduse = ifelse(plot_gams$rix[i] == "sum", 3,
+                    ifelse(plot_gams$rix[i] == "grand_sum", 2, 0.5))
+    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$blue,
+                    ifelse(plot_gams$rix[i] == "grand_sum", "white", colorpal$mint))
+    ltyuse = ifelse(plot_gams$rix[i] == "grand_sum", 0, 1)
+    plot(x = seq(1,1000), y = dgamma(seq(1,1000),
+                                     shape = plot_gams$shape[i], rate=plot_gams$rate[i]), 
+         type="l", col=coluse, log="x", lwd=lwduse, lty=ltyuse, 
+         xlab = expression(paste("Number of brain precursor cells in the E5.5 epiblast (" *alpha[0]*")")), 
+         ylab = "Posterior density")   #, main = expression(paste("Combined"~alpha[0]~"estimates")))
+  } else {
+    lwduse = ifelse(plot_gams$rix[i] == "sum", 3,
+                    ifelse(plot_gams$rix[i] == "grand_sum", 2, 0.5))
+    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$blue,
+                    ifelse(plot_gams$rix[i] == "grand_sum", colorpal$magenta, colorpal$mint))
+    ltyuse = ifelse(plot_gams$rix[i] == "grand_sum", 2, 1)
+    lines(x = seq(1,1000), y = dgamma(seq(1,1000),
+                                      shape = plot_gams$shape[i], rate=plot_gams$rate[i]), 
+          lwd=lwduse, type="l", lty=ltyuse, col=coluse)
+  }
+}
+
+legend("topright", inset=0.02, legend=c("SP1", "SP2","Combined"),
+       col=as.character(colorpal),lty=c(1,1,2), lwd=2)
+
