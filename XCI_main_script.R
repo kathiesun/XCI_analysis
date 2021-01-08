@@ -68,8 +68,9 @@ dict = data.frame(let = LETTERS[1:13], num = 1:13,
                   found = c("AJ","B6","129S1","NOD","NZO","CAST","PWK","WSB", "ALS","BALB","DBA","C3H","FVB"),
                   xce = c("a","b","a","n","z","c","e","b","b","a","b","a","f"))
 
-colorpal=data.frame(blue="#1278BE", mint="#357559", magenta="#A71F82")
-
+#colorpal = data.frame(blue="#1278BE", mint="#357559", magenta="#A71F82")
+colorpal = data.frame(violet = "#3b0a53",blue = "#4b77ba",skyblue = "#74affd", green = "#72b57a", slategray = "#2F4F4F",
+                      magenta = "#a61f82", pink = "#c987be",yellow = "#f4e53c", gray = "#98999c", jet = "#2B2D30")
 ##################################
 ## sample-wide proportion plots ##
 ##################################
@@ -167,8 +168,7 @@ combine_plot_df$CC_lab = gsub("CC","",combine_plot_df$CC_lab)
 
 plot_data = combine_plot_df %>% filter(plot == 0)
 
-cols = c("TRUE" = "darkslategray","FALSE" = "tomato3")
-#cols = c("TRUE" = colorpal$blue,"FALSE" = colorpal$magenta)
+cols = c("TRUE" = colorpal$slategray,"FALSE" = colorpal$magenta)
 
 pfin = ggplot(data=plot_data, aes(y=Mean, x=x_val, col=under_50, 
                                   alpha=rix_sum, shape=shape)) +  
@@ -595,7 +595,7 @@ mvec = c(2422,2138,1656)
 ### 2138 in CC006/CC026, D vs D
 ### 1656 in CC023/CC047, D vs E
 
-rixdat = full_df %>% filter(Pup.ID %in% mvec)
+rixdat = full_df %>% filter(PUP.ID %in% mvec)
 
 for(c in unique(full_df$CC_LAB)){
   rixdat = full_df %>% filter(CC_LAB == c)
@@ -609,12 +609,12 @@ for(c in unique(full_df$CC_LAB)){
     scale_shape_discrete(name=NULL, NULL) + 
     scale_alpha_continuous(name=NULL, NULL) + 
     scale_x_continuous(labels=function(n){paste(n/1000000, "M")}) +
-    geom_hline(yintercept=0.5, col="#181b34", linetype= "dotted", size=1) + 
-    scale_colour_manual(values=c("#404788ff", "#fde725ff")) +
+    geom_hline(yintercept=0.5, col=colorpal$blue, linetype= "dotted", size=1) + 
+    scale_colour_manual(values=c(colorpal$slategray, colorpal$magenta)) +
     geom_ribbon(aes(x=SEQ.POSITION, ymin=pup_lower, ymax=pup_upper), inherit.aes = T, 
                 alpha=0.2, col="gray") + 
     geom_hline(aes(yintercept = pup_mean), col="#292d57") + 
-    facet_wrap(PUP.ID ~ ., scales="free_x") + ylim(c(0,1))
+    facet_wrap(. ~ PUP.ID, scales="free_x") + ylim(c(0,1))
   
   pdf(paste0("../xce_specific_pups_",gsub("/","_",c),".pdf"), width = 15, height = 16)
   print(p)
@@ -650,13 +650,14 @@ ggplot(data = cor_plot, aes(Paternal, Maternal, fill = value))+
 ###         alpha0          ###
 ###############################
 plot_gams = read.csv("../supp/TableS2_alpha0.csv")
+plot_gams = rbind(plot_gams, plot_gams[which(plot_gams$rix == "grand_sum"),])
 
 for(i in 1:nrow(plot_gams)){
   if(i == 1){
     lwduse = ifelse(plot_gams$rix[i] == "sum", 3,
                     ifelse(plot_gams$rix[i] == "grand_sum", 2, 0.5))
-    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$blue,
-                    ifelse(plot_gams$rix[i] == "grand_sum", "white", colorpal$mint))
+    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$magenta,
+                    ifelse(plot_gams$rix[i] == "grand_sum", "white", colorpal$green))
     ltyuse = ifelse(plot_gams$rix[i] == "grand_sum", 0, 1)
     plot(x = seq(1,1000), y = dgamma(seq(1,1000),
                                      shape = plot_gams$shape[i], rate=plot_gams$rate[i]), 
@@ -666,15 +667,15 @@ for(i in 1:nrow(plot_gams)){
   } else {
     lwduse = ifelse(plot_gams$rix[i] == "sum", 3,
                     ifelse(plot_gams$rix[i] == "grand_sum", 2, 0.5))
-    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$blue,
-                    ifelse(plot_gams$rix[i] == "grand_sum", colorpal$magenta, colorpal$mint))
+    coluse = ifelse(plot_gams$sp[i] == 1, colorpal$magenta,
+                    ifelse(plot_gams$rix[i] == "grand_sum", colorpal$skyblue, colorpal$green))
     ltyuse = ifelse(plot_gams$rix[i] == "grand_sum", 2, 1)
     lines(x = seq(1,1000), y = dgamma(seq(1,1000),
                                       shape = plot_gams$shape[i], rate=plot_gams$rate[i]), 
           lwd=lwduse, type="l", lty=ltyuse, col=coluse)
   }
+  
 }
 
 legend("topright", inset=0.02, legend=c("SP1", "SP2","Combined"),
-       col=as.character(colorpal),lty=c(1,1,2), lwd=2)
-
+       col=as.character(colorpal[c(6,4,3)]),lty=c(1,1,2), lwd=2)
