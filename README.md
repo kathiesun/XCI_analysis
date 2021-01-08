@@ -1,9 +1,7 @@
 # XCI_analysis
 
 ** XCI_main_script.R contains code to reproduce all main and supplemental figures in the manuscript. 
-The code depends on files and data that are compiled in the XCI_data/data directory available in the figshare repository.
-
-Link: []
+The code depends on files and data that are compiled in the XCI_data/data directory available in the figshare repository (see Data Availability in manuscript).
 
 Code to regenerate those datasets are provided in the other scripts in this directory:
 
