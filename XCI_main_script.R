@@ -13,40 +13,33 @@ source("ase_summary_source.R")
 ####################################
 
 ## updated Xce info
-xce_map = read.csv("../data/demographic_info/xce_info_CC.csv")
+xce_map = read.csv("FileS7_xce_info_CCstrains.csv")
 
-## SP1 population information 
-xce_pups = read.csv("../data/demographic_info/summary_cegs-mnt_data.csv")
-xce_guide = read.csv("../data/demographic_info/summary_cegs-mnt_rixdata.csv")
-problemPups = c(1404, 1716, 1371, 569, 1911, 1951, 1015) ## removed sample IDs
-
-
-## SP2 population information 
-cegs_demo = read.csv("../data/demographic_info/sp2_demograph_data.csv")
+## SP1/2 population information 
+xce_pups = read.csv("FileS8_demographic_data_SP1-2.csv")
 
 ## X chr genes
-all_genes = read.csv("../data/kmer_data/combined_map_kmerMarkers.csv")
-all_genes = all_genes %>% filter(chr == "X") %>% select(-"X") 
+all_genes = read.csv("FileS9_X_chr_markers_map.csv")
 
 ## load X snps
-snps = readRDS("../data/kmer_data/all_kmers_chrX.rds")[[1]]
+snps = read.csv("FileS10_all_kmers_chrX.csv")
 
 ## SP1 cc haplotypes
-indiv_pups = list.files("../data/demographic_info/SP1_haplotypes", pattern="haploBlocks", full.names = T)
+indiv_pups = list.files("FileS11_SP1_haplotypes", pattern="haploBlocks", full.names = T)
 mnt_haplotypes = lapply(indiv_pups, readRDS)
 tmp = do.call("rbind", lapply(indiv_pups, function(x) unlist(strsplit(x, "_"))))
 names(mnt_haplotypes) = paste0("Pup.ID_", tmp[,ncol(tmp)-1])
 
 ## SP2 cc haplotypes
-hap_pat <- readRDS("../data/demographic_info/SP2_haplotype_data.rds")
+hap_pat <- readRDS("FileS12_SP2_haplotype_data.rds")
 
 ## SP1 regression results
-mnt_regSum = readRDS("../data/regression_outputs/chrX_summary_sp1.rds")
-mnt_df    = readRDS("../data/regression_outputs/chrX_data_sp1.rds")
+mnt_regSum = readRDS("FileS13_chrX_summary_sp1.rds")
+mnt_df    = readRDS("FileS14_chrX_data_sp1.rds")
 
 ## SP2 regression results
-cegs_regSum = readRDS("../data/regression_outputs/chrX_summary_sp2.rds")
-cegs_df     = readRDS("../data/regression_outputs/chrX_data_sp2.rds")
+cegs_regSum = readRDS("FileS15_chrX_summary_sp2.rds")
+cegs_df     = readRDS("FileS16_chrX_data_sp2.rds")
 
 
 ## combine SP data
@@ -68,7 +61,6 @@ dict = data.frame(let = LETTERS[1:13], num = 1:13,
                   found = c("AJ","B6","129S1","NOD","NZO","CAST","PWK","WSB", "ALS","BALB","DBA","C3H","FVB"),
                   xce = c("a","b","a","n","z","c","e","b","b","a","b","a","f"))
 
-#colorpal = data.frame(blue="#1278BE", mint="#357559", magenta="#A71F82")
 colorpal = data.frame(violet = "#3b0a53",blue = "#4b77ba",skyblue = "#74affd", green = "#72b57a", slategray = "#2F4F4F",
                       magenta = "#a61f82", pink = "#c987be",yellow = "#f4e53c", gray = "#98999c", jet = "#2B2D30")
 ##################################
@@ -205,8 +197,8 @@ nod_rix = xce_guide$CCs[which(xce_guide$grp %in% c("NOD vs stronger","NOD vs NOD
 nzo_rix = xce_guide$CCs[which(xce_guide$grp %in% c("NZO vs c","NZO vs b","NZO vs NZO"))]
 
 ## allele probabilities for mnt and cegs
-alleleprobs_minimuga <- readRDS("../data/pup_allele_probabilities/interp_alleleprobs_sp1.rds")
-alleleprobs_cegs = readRDS("../data/pup_allele_probabilities/interp_alleleprobs_sp2.rds")
+alleleprobs_minimuga <- readRDS("FileS17_interp_alleleprobs_sp1.rds")
+alleleprobs_cegs = readRDS("FileS18_interp_alleleprobs_sp2.rds")
 
 ## all markers with probabilities
 X_markers = dimnames(alleleprobs_minimuga)[[3]]
@@ -221,8 +213,8 @@ for(i in 1:dim(alleleprobs_minimuga)[1]){
 
 alleleprobs_cegs_df = do.call("rbind", alleleprobs_cegs)
 alleleprobs_cegs_df$Pup.ID = unlist(strsplit(rownames(alleleprobs_cegs_df),"[.]"))[c(T,F)]
-alleleprobs_cegs_df$CC.1 = cegs_demo$mat_CC[match(alleleprobs_cegs_df$Pup.ID, cegs_demo$sample)]
-alleleprobs_cegs_df$CC.2 = cegs_demo$pat_CC[match(alleleprobs_cegs_df$Pup.ID, cegs_demo$sample)]
+alleleprobs_cegs_df$CC.1 = xce_pups$CC1[match(alleleprobs_cegs_df$Pup.ID, xce_pups$Pup.ID)]
+alleleprobs_cegs_df$CC.2 = xce_pups$CC2[match(alleleprobs_cegs_df$Pup.ID, xce_pups$Pup.ID)]
 alleleprobs_cegs_df$RRIX = apply(alleleprobs_cegs_df, 1, function(x) paste0(x["CC.1"],"/", x["CC.2"]))
 
 alleleprobs_mnt_df = do.call("rbind", alleleprobs_mnt)
@@ -341,21 +333,14 @@ p
 ##################################
 ##          cnv plots           ##
 ##################################
-kmer_bounds = read.table("../data/kmer_data/positions_duplications_7.txt",header=T)
+kmer_bounds = read.table("FileS19_positions_duplications.txt",header=T)
 
 ## meta data for samples providing DNA-seq kmer counts
-meta = read.csv("../data/kmer_data/dna_45kmer_meta_full.csv")
+meta = read.csv("FileS20_dna_45kmer_meta_full.csv")
 meta_use = meta %>% filter(use)
 
 ## all unfiltered kmer counts for CC, inbreds, and sister strains
-kmersAll = read.csv("../data/kmer_data/dna_45kmer_counts_allCCs.csv")
-
-## remove kmers that have overlap in other SD's
-kmer_deets = read.csv("../data/kmer_data/kmer_45_overlaps.csv")
-kmer_deets = kmer_deets[which(kmer_deets$Sequence %in% kmersAll$Sequence),]
-kmersAll = kmersAll[match(kmer_deets$Sequence, kmersAll$Sequence),]
-all.equal(kmer_deets$Sequence, kmersAll$Sequence)
-kmer_deets$Position = kmersAll$Position = kmer_deets$Position/1e6
+kmersAll = read.csv("FileS21_dna_45kmer_counts_allCCs.csv")
 
 ## normalize counts by mode or mean
 counts = kmersAll[,grep("_",colnames(kmersAll))]
@@ -452,7 +437,7 @@ make_cnv_plots = function(founder_label = NULL, kmer_len = 45){
   plot$in_dup[in_dup] = T
   
   km_stats = kmeans(data.frame(plot$diff), centers = centers)
-  centers = km_stats$centers
+  centers = as.vector(km_stats$centers)
   above_0 = which.max(centers)
   below_0 = which.min(centers)
   same = setdiff(1:k, c(above_0, below_0))
@@ -538,10 +523,8 @@ make_cnv_plots = function(founder_label = NULL, kmer_len = 45){
                xintercept = c(kmer_bounds$start, kmer_bounds$end[-1])) +
     theme(plot.title = element_text(size=10), 
           plot.subtitle=element_text(size=8, face="italic", color="gray20")) + #,
-          #axis.text.x = element_text(angle = 90)) + 
     labs(y = paste("Inbred C57BL/6J counts -", title)) #,            
-         #subtitle = paste("Means:", paste(round(sort(centers), 3), collapse=","),sub_nsnps,sub_nsnps_inDup))
-  
+
   return(list(plot = p, data = plot))
 }
   
@@ -616,9 +599,7 @@ for(c in unique(full_df$CC_LAB)){
     geom_hline(aes(yintercept = pup_mean), col="#292d57") + 
     facet_wrap(. ~ PUP.ID, scales="free_x") + ylim(c(0,1))
   
-  pdf(paste0("../xce_specific_pups_",gsub("/","_",c),".pdf"), width = 15, height = 16)
   print(p)
-  dev.off()
 }
 
 ##############################################
@@ -649,7 +630,7 @@ ggplot(data = cor_plot, aes(Paternal, Maternal, fill = value))+
 ###############################
 ###         alpha0          ###
 ###############################
-plot_gams = read.csv("../supp/TableS2_alpha0.csv")
+plot_gams = read.csv("../tables_figures/TableS2_alpha0.csv")
 plot_gams = rbind(plot_gams, plot_gams[which(plot_gams$rix == "grand_sum"),])
 
 for(i in 1:nrow(plot_gams)){
